@@ -11,9 +11,9 @@ RUN yarn --production
 COPY . .
 
 FROM mhart/alpine-node:base-10
-RUN apk add --update --no-cache python
+RUN apk add --update --no-cache python libstdc++ libgcc
 WORKDIR /usr/src
 ENV NODE_ENV="production"
+COPY --from=game /app/mm2018 /game
 COPY --from=base /usr/src .
-COPY --from=game /app/mm2018 ./game
 CMD ["node", "index.js"]

@@ -13,6 +13,8 @@ const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const RUNNER_QUEUE = `runnerQueue`;
 // TODO: use this for stats
 // const STATS_QUEUE = `statsQueue`;
+const GAME_PATH = "/game/game.exe";
+const MAP_PATH = "/game/Map.json";
 const BOTS_DIR = "/bots";
 
 // zip 2 lists together
@@ -35,6 +37,11 @@ async function main() {
   const conn = await amqp.connect(RABBITMQ_URI);
   const ch = await conn.createChannel();
   ch.assertQueue(RUNNER_QUEUE, { durable: true });
+  process.on('SIGTERM', async () => {
+    console.log('Got SIGTERM');
+    await ch.close()
+    conn.close()
+  });
 
   console.log(`Listening to ${RUNNER_QUEUE}`);
   ch.consume(
@@ -70,8 +77,13 @@ async function main() {
       console.log(`${p1} v ${p2} - Waiting for files to decompress`);
       await exctractFilePromise;
 
-      console.log(`${p1} v ${p2} - Runnin Games`);
-      console.log(await readdir(BOTS_DIR));
+      console.log(`${p1} v ${p2} - Running game`);
+      const { stdout } = await execa(GAME_PATH, [
+        ...botDirs.map(p => path.join(p, "run.sh")),
+        MAP_PATH
+      ]);
+      console.log(stdout);
+      console.log(await readdir(GAME_PATH));
 
       ch.ack(message);
     },
