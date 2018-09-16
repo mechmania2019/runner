@@ -1,13 +1,19 @@
-FROM ubuntu:16.04
-
-RUN apt update
-RUN apt install -y build-essential
-RUN apt install -y clang
-RUN apt install -y libc++-dev
-
+FROM alpine:edge as game
+RUN apk add --update --no-cache build-base clang make
 WORKDIR /app
-COPY . .
-
+COPY mm2018 ./mm2018
 RUN cd mm2018 && make
 
-CMD [ "/bin/bash" ]
+FROM mhart/alpine-node:10 as base
+WORKDIR /usr/src
+COPY package.json yarn.lock /usr/src/
+RUN yarn --production
+COPY . .
+
+FROM mhart/alpine-node:base-10
+RUN apk add --update --no-cache python
+WORKDIR /usr/src
+ENV NODE_ENV="production"
+COPY --from=base /usr/src .
+COPY --from=game /app/mm2018 ./game
+CMD ["node", "index.js"]

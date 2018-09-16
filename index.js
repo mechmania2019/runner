@@ -1,72 +1,81 @@
-const fs = require('fs');
-const path = require('path');
-const { promisify } = require('util')
+const { promisify } = require("util");
 
-const mongoose = require('mongoose')
-const AWS = require('aws-sdk')
-const { Team } = require('mm-schemas')(mongoose)
-const amqp = require('amqplib');
-const unzip = require('unzip');
+const AWS = require("aws-sdk");
+const fs = require("fs");
+const path = require("path");
+const rimraf = promisify(require("rimraf"));
+const tar = require("tar");
+const through2 = require("through2");
+const amqp = require("amqplib");
+const execa = require("execa");
+
+const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
+const RUNNER_QUEUE = `runnerQueue`;
+// TODO: use this for stats
+// const STATS_QUEUE = `statsQueue`;
+const BOTS_DIR = "/bots";
+
+// zip 2 lists together
+const zip = (a, b) => a.map((_, i) => [a[i], b[i]]);
 
 const s3 = new AWS.S3({
-  params: { Bucket: 'mechmania' }
-})
+  params: { Bucket: "mechmania" }
+});
 
-const getObject = promisify(s3.getObject.bind(s3))
-
-const RABBITMQ_URI = process.env.RABBITMQ_URI ||'amqp://localhost';
-const RUNNER_QUEUE = `runnerQueue`;
-mongoose.connect(process.env.MONGO_URL)
-mongoose.Promise = global.Promise
-
-const GAMES_DIR = process.env.GAMES_DIR;
-
-function getScripts(scriptIds) {
-  return scriptIds.map(id => s3.getObject({Key: 'compiled/' + id}).createReadStream())
-}
-
-async function unzipZips(scriptFileStreams) {
-  return Promise.all(scriptFileStreams.map(({stream, id}) => {
-    return new Promise((resolve, reject) => {
-      const fPath = path.join(GAMES_DIR, id);
-      const outStream = unzip.Extract({ path: fPath });
-
-      outStream.on('close', () => resolve(fPath));
-      outStream.on('error', reject);
-      stream.on('error', reject);
-
-      stream.pipe(outStream);
-    })
-  }))
-}
-
-function getRunFiles(filePaths) {
-  return filePaths.map(fPath => path.join(fPath, 'run.sh'))
-}
+const getObject = promisify(s3.getObject.bind(s3));
+const upload = promisify(s3.upload.bind(s3));
+const mkdir = promisify(fs.mkdir);
+const readdir = promisify(fs.readdir);
+const access = promisify(fs.access);
 
 async function main() {
+  // Assert that the BOTS_DIR exists
+  await access(BOTS_DIR);
+
   const conn = await amqp.connect(RABBITMQ_URI);
   const ch = await conn.createChannel();
+  ch.assertQueue(RUNNER_QUEUE, { durable: true });
 
-  // input
-  ch.assertQueue(RUNNER_QUEUE, {durable: true});
+  console.log(`Listening to ${RUNNER_QUEUE}`);
+  ch.consume(
+    RUNNER_QUEUE,
+    async message => {
+      console.log(`Got message - ${message.content.toString()}`);
+      const [p1, p2] = JSON.parse(message.content.toString());
+      const botDirs = [p1, p2].map(p => path.join(BOTS_DIR, p));
 
-  ch.consume(RUNNER_QUEUE, async message => {
-    const scriptIds = JSON.parse(message.content.toString());
+      // Extract and decompress
+      console.log(`${p1} v ${p2} - Fetching bots from s3`);
+      // Make a promise that triggers when files are done
+      let r;
+      const exctractFilePromise = new Promise(_r => (r = _r));
+      let left = 2;
+      await Promise.all(
+        zip([p1, p2], botDirs).map(async ([id, path]) => {
+          try {
+            await access(path, fs.constants.F_OK);
+            console.log(`${p1} v ${p2} - Using cached bot for ${id}`);
+            --left || r();
+          } catch (e) {
+            await mkdir(path);
+            console.log(`${p1} v ${p2} - Downloading bot for ${id}`);
+            s3.getObject({ Key: `compiled/${id}` })
+              .createReadStream()
+              .pipe(tar.x({ C: path }))
+              .on("close", () => --left || r());
+          }
+        })
+      );
 
-    const scriptFileStreams = getScripts(scriptIds)
-    const fileNames = await unzipZips(scriptFileStreams.map((stream, i) => ({
-      stream,
-      id: scriptIds[i]
-    })))
+      console.log(`${p1} v ${p2} - Waiting for files to decompress`);
+      await exctractFilePromise;
 
-    const runFiles = getRunFiles(fileNames);
-    
-    // TODO: pass these files need to as args to the game runner as `bash ${runFile}`
-    console.log(runFiles);
+      console.log(`${p1} v ${p2} - Runnin Games`);
+      console.log(await readdir(BOTS_DIR));
 
-    ch.ack(message)
-  }, {noAck: false})
+      ch.ack(message);
+    },
+    { noAck: false }
+  );
 }
-
-main()
+main().catch(console.trace);

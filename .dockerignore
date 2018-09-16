@@ -1,3 +1,7 @@
-node_modules
+*
+!mm2018/
 mm2018/*.o
 mm2018/game.exe
+!index.js
+!package.json
+!yarn.lock
