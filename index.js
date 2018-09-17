@@ -10,12 +10,12 @@ const amqp = require("amqplib");
 const execa = require("execa");
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
+const DOCKER_CREDENTIALS_PATH='/gcr/mechmania2017-key.json'
 const RUNNER_QUEUE = `runnerQueue`;
 // TODO: use this for stats
 // const STATS_QUEUE = `statsQueue`;
 const GAME_PATH = "/game/game.exe";
 const MAP_PATH = "/game/Map.json";
-const BOTS_DIR = "/bots";
 
 // zip 2 lists together
 const zip = (a, b) => a.map((_, i) => [a[i], b[i]]);
@@ -31,16 +31,20 @@ const readdir = promisify(fs.readdir);
 const access = promisify(fs.access);
 
 async function main() {
-  // Assert that the BOTS_DIR exists
-  await access(BOTS_DIR);
+  // Login to docker
+  // docker login -u _json_key --password-stdin https://gcr.io
+  const dockerLoginProc = execa("docker", ["login", "-u", "_json_key", "--password-stdin", "https://gcr.io"])
+  fs.createReadStream(DOCKER_CREDENTIALS_PATH).pipe(dockerLoginProc.stdin);
+  const { stdout, stderr } = await dockerLoginProc;
+  console.log(stdout, stderr)
 
   const conn = await amqp.connect(RABBITMQ_URI);
   const ch = await conn.createChannel();
   ch.assertQueue(RUNNER_QUEUE, { durable: true });
-  process.on('SIGTERM', async () => {
-    console.log('Got SIGTERM');
-    await ch.close()
-    conn.close()
+  process.on("SIGTERM", async () => {
+    console.log("Got SIGTERM");
+    await ch.close();
+    conn.close();
   });
 
   console.log(`Listening to ${RUNNER_QUEUE}`);
@@ -49,41 +53,35 @@ async function main() {
     async message => {
       console.log(`Got message - ${message.content.toString()}`);
       const [p1, p2] = JSON.parse(message.content.toString());
-      const botDirs = [p1, p2].map(p => path.join(BOTS_DIR, p));
+      const images = [p1, p2].map(id => `gcr.io/mechmania2017/${id}`);
 
-      // Extract and decompress
-      console.log(`${p1} v ${p2} - Fetching bots from s3`);
-      // Make a promise that triggers when files are done
-      let r;
-      const exctractFilePromise = new Promise(_r => (r = _r));
-      let left = 2;
+      // Pull docker images
+      console.log(`${p1} v ${p2} - Fetching docker images`);
       await Promise.all(
-        zip([p1, p2], botDirs).map(async ([id, path]) => {
-          try {
-            await access(path, fs.constants.F_OK);
-            console.log(`${p1} v ${p2} - Using cached bot for ${id}`);
-            --left || r();
-          } catch (e) {
-            await mkdir(path);
-            console.log(`${p1} v ${p2} - Downloading bot for ${id}`);
-            s3.getObject({ Key: `compiled/${id}` })
-              .createReadStream()
-              .pipe(tar.x({ C: path }))
-              .on("close", () => --left || r());
-          }
+        images.map(async img => {
+          // TODO: Handle errors
+          const { stdout, stderr } = await execa("docker", ["pull", img]);
         })
-      );
-
-      console.log(`${p1} v ${p2} - Waiting for files to decompress`);
-      await exctractFilePromise;
+      );      
 
       console.log(`${p1} v ${p2} - Running game`);
-      const { stdout } = await execa(GAME_PATH, [
-        ...botDirs.map(p => path.join(p, "run.sh")),
-        MAP_PATH
-      ]);
-      console.log(stdout);
-      console.log(await readdir(GAME_PATH));
+      try {
+        const { stdout } = await execa(GAME_PATH, [
+          ...images.map(img => `docker run --rm -i ${img}`),
+          MAP_PATH
+        ]);
+        console.log(stdout);
+      } catch (e) {
+        // TODO: consider this game a tie
+        console.log(`${p1} v ${p2} - The game engine exited`);
+        console.warn(e)
+      }
+
+      console.log(`${p1} v ${p2} - Uploading logfile to s3`);
+      // TODO: upload the logfile to s3
+
+      console.log(`${p1} v ${p2} - Updating mongo with logfile info`);
+      // TODO: Update mongo
 
       ch.ack(message);
     },

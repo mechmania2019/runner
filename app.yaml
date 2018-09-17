@@ -17,9 +17,6 @@ spec:
       containers:
         - name: runner
           image: gcr.io/mechmania2017/runner:latest
-          volumeMounts:
-          - mountPath: /bots
-            name: bots
           env:
             - name: MONGO_URL
               valueFrom:
@@ -41,6 +38,17 @@ spec:
                 secretKeyRef:
                   name: creds
                   key: aws_secret_access_key
+          volumeMounts:
+          - mountPath: /var/run/docker.sock
+            name: docker-sock
+          - mountPath: /gcr
+            name: gcr
+            readOnly: true
       volumes:
-      - name: bots
-        emptyDir: {}
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+          type: File
+      - name: gcr
+        secret:
+          secretName: gcr
