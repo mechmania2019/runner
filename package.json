@@ -7,7 +7,7 @@
     "amqplib": "0.5.2",
     "aws-sdk": "2.222.1",
     "execa": "1.0.0",
-    "mm-schemas": "0.0.2",
+    "mm-schemas": "0.0.3",
     "mongoose": "5.0.7",
     "rimraf": "2.6.2",
     "tar": "4.4.6",

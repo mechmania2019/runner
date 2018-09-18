@@ -1,5 +1,6 @@
 const { promisify } = require("util");
 
+const mongoose = require("mongoose");
 const AWS = require("aws-sdk");
 const fs = require("fs");
 const path = require("path");
@@ -9,17 +10,16 @@ const through2 = require("through2");
 const amqp = require("amqplib");
 const execa = require("execa");
 const run = require("./run");
+const { Match } = require("mm-schemas")(mongoose);
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
 const RUNNER_QUEUE = `runnerQueue`;
-// TODO: use this for stats
-// const STATS_QUEUE = `statsQueue`;
 const GAME_PATH = "/game/game.exe";
 const MAP_PATH = "/game/Map.json";
 
-// zip 2 lists together
-const zip = (a, b) => a.map((_, i) => [a[i], b[i]]);
+mongoose.connect(process.env.MONGO_URL);
+mongoose.Promise = global.Promise;
 
 const s3 = new AWS.S3({
   params: { Bucket: "mechmania" }
@@ -62,8 +62,9 @@ async function main() {
     RUNNER_QUEUE,
     async message => {
       console.log(`Got message - ${message.content.toString()}`);
-      const [p1, p2] = JSON.parse(message.content.toString());
+      const [p1, p2] = JSON.parse(message.content.toString()).sort();
       const images = [p1, p2].map(id => `gcr.io/mechmania2017/${id}`);
+      const matchName = `logs/${p1}:${p2}`;
 
       // Pull docker images
       console.log(`${p1} v ${p2} - Fetching docker images`);
@@ -71,21 +72,44 @@ async function main() {
 
       console.log(`${p1} v ${p2} - Running game`);
       try {
-        await run(GAME_PATH, [
+        const { stdout, stderr } = await run(GAME_PATH, [
           ...images.map(img => `docker run --rm -i ${img}`),
           MAP_PATH
         ]);
+        // TODO: Save the stderr somewhere too so we have debug infor for each run?
+        console.log(`${p1} v ${p2} - Uploading logfile to s3`);
+        const data = await upload({
+          Key: matchName,
+          Body: stdout
+        });
+        console.log(`${p1} v ${p2} - Uploaded to s3 (${data.Location})`);
+
+        console.log(`${p1} v ${p2} - Parsing logfile for stats`);
+        const lastRecord = stdout.split("\n").slice(0, -1)[0];
+        console.log(`${p1} v ${p2} - Last log line is ${lastRecord}`);
+        const { Winner: winner } = JSON.parse(lastRecord);
+        console.log(`${p1} v ${p2} - Winner is ${winner}`);
+
+        console.log(`${p1} v ${p2} - Creating mongo record`);
+        const match = new Match({
+          key: matchName,
+          winner
+        });
+        console.log(`${p1} v ${p2} - Saving mongo record`);
+        await match.save();
       } catch (e) {
-        // TODO: consider this game a tie
         console.log(`${p1} v ${p2} - The game engine exited`);
-        console.warn(e);
+        console.error(e);
+
+        console.log(`${p1} v ${p2} - Considering the game a tie`);
+        console.log(`${p1} v ${p2} - Creating mongo record`);
+        const match = new Match({
+          key: matchName,
+          winner: 3
+        });
+        console.log(`${p1} v ${p2} - Saving mongo record`);
+        await match.save();
       }
-
-      console.log(`${p1} v ${p2} - Uploading logfile to s3`);
-      // TODO: upload the logfile to s3
-
-      console.log(`${p1} v ${p2} - Updating mongo with logfile info`);
-      // TODO: Update mongo
 
       ch.ack(message);
     },
