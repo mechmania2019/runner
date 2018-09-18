@@ -85,7 +85,7 @@ async function main() {
         console.log(`${p1} v ${p2} - Uploaded to s3 (${data.Location})`);
 
         console.log(`${p1} v ${p2} - Parsing logfile for stats`);
-        const lastRecord = stdout.split("\n").slice(0, -1)[0];
+        const lastRecord = stdout.split("\n").slice(-2)[0];
         console.log(`${p1} v ${p2} - Last log line is ${lastRecord}`);
         const { Winner: winner } = JSON.parse(lastRecord);
         console.log(`${p1} v ${p2} - Winner is ${winner}`);

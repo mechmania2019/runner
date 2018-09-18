@@ -249,9 +249,9 @@ mkdirp@^0.5.0:
   dependencies:
     minimist "0.0.8"
 
-mm-schemas@0.0.4:
-  version "0.0.4"
-  resolved "https://registry.yarnpkg.com/mm-schemas/-/mm-schemas-0.0.4.tgz#bb686afb09f9e264540a80d247e1a8039f7cfeef"
+mm-schemas@0.0.5:
+  version "0.0.5"
+  resolved "https://registry.yarnpkg.com/mm-schemas/-/mm-schemas-0.0.5.tgz#f0442da61ab87ded3859c8a10f8f24196ab9de6c"
   dependencies:
     cuid "2.1.4"
     mongoose "5.0.7"
