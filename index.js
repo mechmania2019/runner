@@ -8,9 +8,10 @@ const tar = require("tar");
 const through2 = require("through2");
 const amqp = require("amqplib");
 const execa = require("execa");
+const run = require("./run");
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
-const DOCKER_CREDENTIALS_PATH='/gcr/mechmania2017-key.json'
+const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
 const RUNNER_QUEUE = `runnerQueue`;
 // TODO: use this for stats
 // const STATS_QUEUE = `statsQueue`;
@@ -33,14 +34,23 @@ const access = promisify(fs.access);
 async function main() {
   // Login to docker
   // docker login -u _json_key --password-stdin https://gcr.io
-  const dockerLoginProc = execa("docker", ["login", "-u", "_json_key", "--password-stdin", "https://gcr.io"])
+  const dockerLoginProc = execa("docker", [
+    "login",
+    "-u",
+    "_json_key",
+    "--password-stdin",
+    "https://gcr.io"
+  ]);
   fs.createReadStream(DOCKER_CREDENTIALS_PATH).pipe(dockerLoginProc.stdin);
-  const { stdout, stderr } = await dockerLoginProc;
-  console.log(stdout, stderr)
+  const { stdout, stderr } = dockerLoginProc;
+  stdout.pipe(process.stdout);
+  stderr.pipe(process.stderr);
+  await dockerLoginProc;
 
   const conn = await amqp.connect(RABBITMQ_URI);
   const ch = await conn.createChannel();
   ch.assertQueue(RUNNER_QUEUE, { durable: true });
+  ch.prefetch(1);
   process.on("SIGTERM", async () => {
     console.log("Got SIGTERM");
     await ch.close();
@@ -57,24 +67,18 @@ async function main() {
 
       // Pull docker images
       console.log(`${p1} v ${p2} - Fetching docker images`);
-      await Promise.all(
-        images.map(async img => {
-          // TODO: Handle errors
-          const { stdout, stderr } = await execa("docker", ["pull", img]);
-        })
-      );      
+      await Promise.all(images.map(img => run("docker", ["pull", img])));
 
       console.log(`${p1} v ${p2} - Running game`);
       try {
-        const { stdout } = await execa(GAME_PATH, [
+        await run(GAME_PATH, [
           ...images.map(img => `docker run --rm -i ${img}`),
           MAP_PATH
         ]);
-        console.log(stdout);
       } catch (e) {
         // TODO: consider this game a tie
         console.log(`${p1} v ${p2} - The game engine exited`);
-        console.warn(e)
+        console.warn(e);
       }
 
       console.log(`${p1} v ${p2} - Uploading logfile to s3`);
