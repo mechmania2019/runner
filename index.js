@@ -80,7 +80,9 @@ async function main() {
         console.log(`${p1} v ${p2} - Uploaded to s3 (${data.Location})`);
 
         console.log(`${p1} v ${p2} - Parsing logfile for stats`);
-        const lastRecord = stdout.split("\n").slice(-2)[0];
+        const logLines = stdout.split("\n");
+        const numLogLines = logLines.length - 1; // -1 becuause the last line is just '\n'
+        const lastRecord = logLines.slice(-2)[0];
         console.log(`${p1} v ${p2} - Last log line is ${lastRecord}`);
         const { Winner: winner } = JSON.parse(lastRecord);
         console.log(`${p1} v ${p2} - Winner is ${winner}`);
@@ -88,7 +90,8 @@ async function main() {
         console.log(`${p1} v ${p2} - Creating mongo record`);
         const match = new Match({
           key: matchName,
-          winner
+          length: numLogLines,
+          winner,
         });
         console.log(`${p1} v ${p2} - Saving mongo record`);
         await match.save();
