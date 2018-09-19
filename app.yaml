@@ -5,7 +5,7 @@ metadata:
   labels:
     app: runner
 spec:
-  replicas: 1
+  replicas: 60
   selector:
     matchLabels:
       app: runner
