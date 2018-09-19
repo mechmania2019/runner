@@ -4,7 +4,6 @@ const mongoose = require("mongoose");
 const AWS = require("aws-sdk");
 const fs = require("fs");
 const path = require("path");
-const rimraf = promisify(require("rimraf"));
 const tar = require("tar");
 const through2 = require("through2");
 const amqp = require("amqplib");
@@ -25,11 +24,7 @@ const s3 = new AWS.S3({
   params: { Bucket: "mechmania" }
 });
 
-const getObject = promisify(s3.getObject.bind(s3));
 const upload = promisify(s3.upload.bind(s3));
-const mkdir = promisify(fs.mkdir);
-const readdir = promisify(fs.readdir);
-const access = promisify(fs.access);
 
 async function main() {
   // Login to docker
@@ -50,7 +45,7 @@ async function main() {
   const conn = await amqp.connect(RABBITMQ_URI);
   const ch = await conn.createChannel();
   ch.assertQueue(RUNNER_QUEUE, { durable: true });
-  ch.prefetch(1);
+  ch.prefetch(2); // Each instance can run upto 2 games in parallel
   process.on("SIGTERM", async () => {
     console.log("Got SIGTERM");
     await ch.close();
