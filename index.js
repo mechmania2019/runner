@@ -16,6 +16,7 @@ const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
 const RUNNER_QUEUE = `runnerQueue`;
 const GAME_PATH = "/game/game.exe";
 const MAP_PATH = "/game/Map.json";
+const BOT_STARTUP_TIMEOUT = "8"; // 8s
 
 mongoose.connect(process.env.MONGO_URL);
 mongoose.Promise = global.Promise;
@@ -62,14 +63,22 @@ async function main() {
       const matchName = `logs/${p1}:${p2}`;
 
       // Pull docker images
-      console.log(`${p1} v ${p2} - Fetching docker images`);
-      await Promise.all(images.map(img => run("docker", ["pull", img])));
+      try {
+        console.log(`${p1} v ${p2} - Fetching docker images`);
+        await Promise.all(images.map(img => run("docker", ["pull", img])));
+      } catch (e) {
+        // Sleep 5s and requeue the message
+        console.warn("Got an error on docker pull. Sleeping 5s and requeueing");
+        await new Promise(r => setTimeout(r, 5000));
+        ch.nack(message);
+      }
 
       console.log(`${p1} v ${p2} - Running game`);
       try {
-        const { stdout, stderr } = await run(GAME_PATH, [
+        const { stdout, stderr } = await execa(GAME_PATH, [
           ...images.map(img => `docker run --rm -i ${img}`),
-          MAP_PATH
+          MAP_PATH,
+          BOT_STARTUP_TIMEOUT
         ]);
         // TODO: Save the stderr somewhere too so we have debug infor for each run?
         console.log(`${p1} v ${p2} - Uploading logfile to s3`);
@@ -81,20 +90,24 @@ async function main() {
 
         console.log(`${p1} v ${p2} - Parsing logfile for stats`);
         const logLines = stdout.split("\n");
-        const numLogLines = logLines.length - 1; // -1 becuause the last line is just '\n'
-        const lastRecord = logLines.slice(-2)[0];
+        const numLogLines = logLines.length; // -1 becuause the last line is just '\n'
+        const lastRecord = logLines.slice(-1)[0];
         console.log(`${p1} v ${p2} - Last log line is ${lastRecord}`);
         const { Winner: winner } = JSON.parse(lastRecord);
         console.log(`${p1} v ${p2} - Winner is ${winner}`);
 
         console.log(`${p1} v ${p2} - Creating mongo record`);
-        const match = new Match({
-          key: matchName,
-          length: numLogLines,
-          winner,
-        });
-        console.log(`${p1} v ${p2} - Saving mongo record`);
-        await match.save();
+        await Match.update(
+          {
+            key: matchName
+          },
+          {
+            key: matchName,
+            length: numLogLines,
+            winner
+          },
+          { upsert: true }
+        ).exec();
       } catch (e) {
         console.log(`${p1} v ${p2} - The game engine exited`);
         console.error(e);
