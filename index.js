@@ -10,6 +10,8 @@ const amqp = require("amqplib");
 const execa = require("execa");
 const run = require("./run");
 const { Match } = require("mm-schemas")(mongoose);
+const { Script } = require("mm-schemas")(mongoose);
+const { Team } = require("mm-schemas")(mongoose);
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
@@ -26,6 +28,18 @@ const s3 = new AWS.S3({
 });
 
 const upload = promisify(s3.upload.bind(s3));
+
+// Quick and dirty solution. If time permits, 
+// we may want to think about what should get pushed to the queue
+async function getLatest(key) {
+  const script = await Script.findOne({ 'key' : key })
+        .populate({
+          path: 'owner',
+          populate: { path: 'latestScript' }
+        })
+        .exec();
+  return script.owner.latestScript.url;
+}
 
 async function main() {
   // Login to docker
@@ -59,6 +73,10 @@ async function main() {
     async message => {
       console.log(`Got message - ${message.content.toString()}`);
       const [p1, p2] = JSON.parse(message.content.toString()).sort();
+
+      const p1LatestURL = await getLatest(p1);
+      const p2LatestURL = await getLatest(p2);
+
       const images = [p1, p2].map(id => `gcr.io/mechmania2017/${id}`);
       const matchName = `logs/${p1}:${p2}`;
 
