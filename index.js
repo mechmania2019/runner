@@ -22,7 +22,7 @@ mongoose.connect(process.env.MONGO_URL);
 mongoose.Promise = global.Promise;
 
 const s3 = new AWS.S3({
-  params: { Bucket: "mechmania" }
+  params: { Bucket: "mechmania2019" }
 });
 
 const upload = promisify(s3.upload.bind(s3));
