@@ -11,7 +11,6 @@ const execa = require("execa");
 const run = require("./run");
 const { Match } = require("mm-schemas")(mongoose);
 const { Script } = require("mm-schemas")(mongoose);
-const { Team } = require("mm-schemas")(mongoose);
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
@@ -73,28 +72,13 @@ async function main() {
     async message => {
       console.log(`Got message - ${message.content.toString()}`);
       const [p1, p2] = JSON.parse(message.content.toString()).sort();
-
-      const p1LatestURL = await getLatest(p1);
-      const p2LatestURL = await getLatest(p2);
-
-      const images = [p1, p2].map(id => `gcr.io/mechmania2017/${id}`);
+      const urls = await Promise.all([p1, p2].map(id => getLatest(id)));
       const matchName = `logs/${p1}:${p2}`;
-
-      // Pull docker images
-      try {
-        console.log(`${p1} v ${p2} - Fetching docker images`);
-        await Promise.all(images.map(img => run("docker", ["pull", img])));
-      } catch (e) {
-        // Sleep 5s and requeue the message
-        console.warn("Got an error on docker pull. Sleeping 5s and requeueing");
-        await new Promise(r => setTimeout(r, 5000));
-        ch.nack(message);
-      }
 
       console.log(`${p1} v ${p2} - Running game`);
       try {
         const { stdout, stderr } = await execa(GAME_PATH, [
-          ...images.map(img => `docker run --rm -i ${img}`),
+          ...urls.map(url => `docker run --rm -i ${url}`),
           MAP_PATH,
           BOT_STARTUP_TIMEOUT
         ]);
