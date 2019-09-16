@@ -1,8 +1,8 @@
 FROM alpine:edge as game
 RUN apk add --update --no-cache build-base clang make
 WORKDIR /app
-COPY mm2018 ./mm2018
-RUN cd mm2018 && make
+COPY mm25_game_engine ./mm25_game_engine
+RUN cd mm25_game_engine && make
 
 FROM mhart/alpine-node:10 as base
 WORKDIR /usr/src
