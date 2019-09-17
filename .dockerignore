@@ -1,7 +1,7 @@
 *
-!mm2018/
-mm2018/*.o
-mm2018/game.exe
+!mm25_game_engine/
+mm25_game_engine/*.o
+mm25_game_engine/game.exe
 !index.js
 !run.js
 !package.json

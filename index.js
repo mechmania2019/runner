@@ -14,6 +14,8 @@ const { Match } = require("mm-schemas")(mongoose);
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
 const RUNNER_QUEUE = `runnerQueue`;
+// TODO: Update these for the new game engine 
+// java -jar GameEngine.jar [gameId] [boardFile] [player1Name] [player2Name] [player1URL] [player2URL] STDOUT
 const GAME_PATH = "/game/game.exe";
 const MAP_PATH = "/game/Map.json";
 const BOT_STARTUP_TIMEOUT = "8"; // 8s
