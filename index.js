@@ -63,74 +63,72 @@ async function main() {
 
       if (script1._id !== owner1.latestScript || script2._id !== owner2.latestScript) {
         console.log(`${p1} v ${p2} match aborted; current scripts are not the latest scripts`);
-
-        return;
-      }
-
-      console.log(
-        `${p1} v ${p2} - Got more data. IPs ${script1.ip} v ${script2.ip}`
-      );
-      try {
-        // java -jar GameEngine.jar [gameId] [boardFile] [player1Name] [player2Name] [player1URL] [player2URL] STDOUT
-        const { stdout, stderr } = await execa("java", [
-          "-jar",
-          path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
-          `${p1}:${p2}`,
-          path.join(GAME_ENGINE_DIR, "board.csv"),
-          "Red", // TODO: fix
-          "Blue", // TODO: fix
-          `http://${script1.ip}:80/`,
-          `http://${script2.ip}:80/`,
-          "STDOUT"
-        ]);
-        // TODO: Save the stderr somewhere too so we have debug infor for each run?
-
-        console.log("STDOUT");
-        console.log(stdout);
-        console.log("STDERR");
-        console.log(stderr);
-
-        console.log(`${p1} v ${p2} - Uploading logfile to s3`);
-        const data = await upload({
-          Key: matchName,
-          Body: stdout
-        });
-        console.log(`${p1} v ${p2} - Uploaded to s3 (${data.Location})`);
-
-        console.log(`${p1} v ${p2} - Parsing logfile for stats`);
-        const logLines = stdout.split("\n");
-        const numLogLines = logLines.length; // -1 becuause the last line is just '\n'
-        const lastRecord = logLines.slice(-1)[0];
-        console.log(`${p1} v ${p2} - Last log line is ${lastRecord}`);
-        const { Winner: winner } = JSON.parse(lastRecord);
-        console.log(`${p1} v ${p2} - Winner is ${winner}`);
-
-        console.log(`${p1} v ${p2} - Creating mongo record`);
-        await Match.update(
-          {
-            key: matchName
-          },
-          {
+      } else {
+        console.log(
+          `${p1} v ${p2} - Got more data. IPs ${script1.ip} v ${script2.ip}`
+        );
+        try {
+          // java -jar GameEngine.jar [gameId] [boardFile] [player1Name] [player2Name] [player1URL] [player2URL] STDOUT
+          const { stdout, stderr } = await execa("java", [
+            "-jar",
+            path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
+            `${p1}:${p2}`,
+            path.join(GAME_ENGINE_DIR, "board.csv"),
+            "Red", // TODO: fix
+            "Blue", // TODO: fix
+            `http://${script1.ip}:80/`,
+            `http://${script2.ip}:80/`,
+            "STDOUT"
+          ]);
+          // TODO: Save the stderr somewhere too so we have debug infor for each run?
+  
+          console.log("STDOUT");
+          console.log(stdout);
+          console.log("STDERR");
+          console.log(stderr);
+  
+          console.log(`${p1} v ${p2} - Uploading logfile to s3`);
+          const data = await upload({
+            Key: matchName,
+            Body: stdout
+          });
+          console.log(`${p1} v ${p2} - Uploaded to s3 (${data.Location})`);
+  
+          console.log(`${p1} v ${p2} - Parsing logfile for stats`);
+          const logLines = stdout.split("\n");
+          const numLogLines = logLines.length; // -1 becuause the last line is just '\n'
+          const lastRecord = logLines.slice(-1)[0];
+          console.log(`${p1} v ${p2} - Last log line is ${lastRecord}`);
+          const { Winner: winner } = JSON.parse(lastRecord);
+          console.log(`${p1} v ${p2} - Winner is ${winner}`);
+  
+          console.log(`${p1} v ${p2} - Creating mongo record`);
+          await Match.update(
+            {
+              key: matchName
+            },
+            {
+              key: matchName,
+              length: numLogLines,
+              winner
+            },
+            { upsert: true }
+          ).exec();
+        } catch (e) {
+          console.log(`${p1} v ${p2} - The game engine exited`);
+          console.error(e);
+  
+          console.log(`${p1} v ${p2} - Considering the game a tie`);
+          console.log(`${p1} v ${p2} - Creating mongo record`);
+          const match = new Match({
             key: matchName,
-            length: numLogLines,
-            winner
-          },
-          { upsert: true }
-        ).exec();
-      } catch (e) {
-        console.log(`${p1} v ${p2} - The game engine exited`);
-        console.error(e);
-
-        console.log(`${p1} v ${p2} - Considering the game a tie`);
-        console.log(`${p1} v ${p2} - Creating mongo record`);
-        const match = new Match({
-          key: matchName,
-          winner: 0
-        });
-        console.log(`${p1} v ${p2} - Saving mongo record`);
-        await match.save();
+            winner: 0
+          });
+          console.log(`${p1} v ${p2} - Saving mongo record`);
+          await match.save();
+        }
       }
-
+      
       ch.ack(message);
     },
     { noAck: false }
