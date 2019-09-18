@@ -9,7 +9,7 @@ const through2 = require("through2");
 const amqp = require("amqplib");
 const execa = require("execa");
 const run = require("./run");
-const { Match, Script } = require("mm-schemas")(mongoose);
+const { Team, Match, Script } = require("mm-schemas")(mongoose);
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const RUNNER_QUEUE = `runnerQueue`;
@@ -51,6 +51,22 @@ async function main() {
           }).exec()
         )
       );
+
+      console.log(`${p1} v ${p2} - Fetching owners of these scripts`);
+      const [owner1, owner2] = await Promise.all(
+        [scrtip1, scrtip2].map(owner => 
+          Team.findOne({
+            _id: owner
+          }).exec()
+        )
+      );
+
+      if (script1._id !== owner1.latestScript || script2._id !== owner2.latestScript) {
+        console.log(`${p1} v ${p2} match aborted; current scripts are not the latest scripts`);
+
+        return;
+      }
+
       console.log(
         `${p1} v ${p2} - Got more data. IPs ${script1.ip} v ${script2.ip}`
       );
