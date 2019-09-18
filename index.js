@@ -56,7 +56,7 @@ async function main() {
       );
       try {
         // java -jar GameEngine.jar [gameId] [boardFile] [player1Name] [player2Name] [player1URL] [player2URL] STDOUT
-        const { stdout, stderr } = await execa("java", [
+        const args = [
           "-jar",
           path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
           `${p1}:${p2}`,
@@ -66,13 +66,17 @@ async function main() {
           `http://${script1.ip}:80/`,
           `http://${script2.ip}:80/`,
           "STDOUT"
-        ]);
+        ];
+        console.log(`${p1} v ${p2} -`, args);
+        const { stdout, all, command, exitCode } = await execa("java", args, {
+          all: true
+        });
         // TODO: Save the stderr somewhere too so we have debug infor for each run?
 
-        console.log("STDOUT");
-        console.log(stdout);
-        console.log("STDERR");
-        console.log(stderr);
+        console.log("Command:", command);
+        console.log("Exit Code:", exitCode);
+        console.log("Output");
+        console.log(all);
 
         console.log(`${p1} v ${p2} - Uploading logfile to s3`);
         const data = await upload({
