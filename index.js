@@ -61,10 +61,10 @@ async function main() {
           path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
           `${p1}:${p2}`,
           path.join(GAME_ENGINE_DIR, "Maps"),
-          "Player 1", // TODO: fix
-          "Player 2", // TODO: fix
-          script1.ip,
-          script2.ip,
+          "Red", // TODO: fix
+          "Blue", // TODO: fix
+          `http://${script1.ip}:80/`,
+          `http://${script2.ip}:80/`,
           "STDOUT"
         ]);
         // TODO: Save the stderr somewhere too so we have debug infor for each run?
