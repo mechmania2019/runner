@@ -60,7 +60,7 @@ async function main() {
           "-jar",
           path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
           `${p1}:${p2}`,
-          path.join(GAME_ENGINE_DIR, "Maps"),
+          path.join(GAME_ENGINE_DIR, "board.csv"),
           "Red", // TODO: fix
           "Blue", // TODO: fix
           `http://${script1.ip}:80/`,
@@ -68,6 +68,12 @@ async function main() {
           "STDOUT"
         ]);
         // TODO: Save the stderr somewhere too so we have debug infor for each run?
+
+        console.log("STDOUT");
+        console.log(stdout);
+        console.log("STDERR");
+        console.log(stderr);
+
         console.log(`${p1} v ${p2} - Uploading logfile to s3`);
         const data = await upload({
           Key: matchName,
