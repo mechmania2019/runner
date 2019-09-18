@@ -15,7 +15,8 @@ const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
 const RUNNER_QUEUE = `runnerQueue`;
 const GAME_ENGINE_DIR = path.join(__dirname, "mm25_game_engine");
 
-mongoose.connect(process.env.MONGO_URL);
+mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
+mongoose.set('useCreateIndex', true);
 mongoose.Promise = global.Promise;
 
 const s3 = new AWS.S3({
