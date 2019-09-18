@@ -55,7 +55,7 @@ async function main() {
 
       const [owner1, owner2] = [script1.owner, script2.owner];
 
-      console.log(`Owner 1: ${owner1}. Owner 2: ${owner2}`);
+      console.log(`Team 1: ${owner1.name}. Team 2: ${owner2.name}`);
 
       if (script1._id !== owner1.latestScript || script2._id !== owner2.latestScript) {
         console.log(`${p1} v ${p2} match aborted; current scripts are not the latest scripts`);
