@@ -49,18 +49,13 @@ async function main() {
         [p1, p2].map(id =>
           Script.findOne({
             key: id
-          }).exec()
+          }).populate('owner').exec()
         )
       );
-      
-      console.log(`${p1} v ${p2} - Fetching owners of these scripts`);
-      const [owner1, owner2] = await Promise.all(
-        [scrtip1, scrtip2].map(owner => 
-          Team.findOne({
-            _id: owner
-          }).exec()
-        )
-      );
+
+      const [owner1, owner2] = [script1.owner, script2.owner];
+
+      console.log(`Owner 1: ${owner1}. Owner 2: ${owner2}`);
 
       if (script1._id !== owner1.latestScript || script2._id !== owner2.latestScript) {
         console.log(`${p1} v ${p2} match aborted; current scripts are not the latest scripts`);
