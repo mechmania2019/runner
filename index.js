@@ -9,16 +9,11 @@ const through2 = require("through2");
 const amqp = require("amqplib");
 const execa = require("execa");
 const run = require("./run");
-const { Match } = require("mm-schemas")(mongoose);
+const { Match, Script } = require("mm-schemas")(mongoose);
 
 const RABBITMQ_URI = process.env.RABBITMQ_URI || "amqp://localhost";
-const DOCKER_CREDENTIALS_PATH = "/gcr/mechmania2017-key.json";
 const RUNNER_QUEUE = `runnerQueue`;
-// TODO: Update these for the new game engine 
-// java -jar GameEngine.jar [gameId] [boardFile] [player1Name] [player2Name] [player1URL] [player2URL] STDOUT
-const GAME_PATH = "/game/game.exe";
-const MAP_PATH = "/game/Map.json";
-const BOT_STARTUP_TIMEOUT = "8"; // 8s
+const GAME_ENGINE_DIR = path.join(__dirname, "mm25_game_engine");
 
 mongoose.connect(process.env.MONGO_URL);
 mongoose.Promise = global.Promise;
@@ -30,21 +25,6 @@ const s3 = new AWS.S3({
 const upload = promisify(s3.upload.bind(s3));
 
 async function main() {
-  // Login to docker
-  // docker login -u _json_key --password-stdin https://gcr.io
-  const dockerLoginProc = execa("docker", [
-    "login",
-    "-u",
-    "_json_key",
-    "--password-stdin",
-    "https://gcr.io"
-  ]);
-  fs.createReadStream(DOCKER_CREDENTIALS_PATH).pipe(dockerLoginProc.stdin);
-  const { stdout, stderr } = dockerLoginProc;
-  stdout.pipe(process.stdout);
-  stderr.pipe(process.stderr);
-  await dockerLoginProc;
-
   const conn = await amqp.connect(RABBITMQ_URI);
   const ch = await conn.createChannel();
   ch.assertQueue(RUNNER_QUEUE, { durable: true });
@@ -61,26 +41,31 @@ async function main() {
     async message => {
       console.log(`Got message - ${message.content.toString()}`);
       const [p1, p2] = JSON.parse(message.content.toString()).sort();
-      const images = [p1, p2].map(id => `gcr.io/mechmania2017/${id}`);
       const matchName = `logs/${p1}:${p2}`;
 
-      // Pull docker images
+      console.log(`${p1} v ${p2} - Getting script data for these IDs`);
+      const [script1, script2] = await Promise.all(
+        [p1, p2].map(id =>
+          Script.findOne({
+            key: id
+          }).exec()
+        )
+      );
+      console.log(
+        `${p1} v ${p2} - Got more data. IPs ${script1.ip} v ${script2.ip}`
+      );
       try {
-        console.log(`${p1} v ${p2} - Fetching docker images`);
-        await Promise.all(images.map(img => run("docker", ["pull", img])));
-      } catch (e) {
-        // Sleep 5s and requeue the message
-        console.warn("Got an error on docker pull. Sleeping 5s and requeueing");
-        await new Promise(r => setTimeout(r, 5000));
-        ch.nack(message);
-      }
-
-      console.log(`${p1} v ${p2} - Running game`);
-      try {
-        const { stdout, stderr } = await execa(GAME_PATH, [
-          ...images.map(img => `docker run --rm -i ${img}`),
-          MAP_PATH,
-          BOT_STARTUP_TIMEOUT
+        // java -jar GameEngine.jar [gameId] [boardFile] [player1Name] [player2Name] [player1URL] [player2URL] STDOUT
+        const { stdout, stderr } = await execa("java", [
+          "-jar",
+          path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
+          `${p1}:${p2}`,
+          path.join(GAME_ENGINE_DIR, "Maps"),
+          "Player 1", // TODO: fix
+          "Player 2", // TODO: fix
+          script1.ip,
+          script2.ip,
+          "STDOUT"
         ]);
         // TODO: Save the stderr somewhere too so we have debug infor for each run?
         console.log(`${p1} v ${p2} - Uploading logfile to s3`);
@@ -118,7 +103,7 @@ async function main() {
         console.log(`${p1} v ${p2} - Creating mongo record`);
         const match = new Match({
           key: matchName,
-          winner: 3
+          winner: 0
         });
         console.log(`${p1} v ${p2} - Saving mongo record`);
         await match.save();

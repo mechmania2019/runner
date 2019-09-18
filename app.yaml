@@ -41,14 +41,8 @@ spec:
           volumeMounts:
           - mountPath: /var/run/docker.sock
             name: docker-sock
-          - mountPath: /gcr
-            name: gcr
-            readOnly: true
       volumes:
       - name: docker-sock
         hostPath:
           path: /var/run/docker.sock
           type: File
-      - name: gcr
-        secret:
-          secretName: gcr
