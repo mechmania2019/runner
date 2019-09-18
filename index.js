@@ -129,6 +129,7 @@ async function main() {
         }
       }
 
+      console.log(`${p1} v ${p2} Acknowledging message`);
       ch.ack(message);
     },
     { noAck: false }
