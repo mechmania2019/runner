@@ -82,20 +82,25 @@ async function main() {
             path.join(GAME_ENGINE_DIR, "board.csv"),
             "Red", // TODO: fix
             "Blue", // TODO: fix
-            `http://${script1.ip}:80/`,
-            `http://${script2.ip}:80/`,
+            `http://${script1.ip}:8080/`,
+            `http://${script2.ip}:8080/`,
             "STDOUT"
           ];
           console.log(`${p1} v ${p2} -`, args);
-          const { stdout, all, command, exitCode } = await execa("java", args, {
-            all: true
+          console.log(`${p1} v ${p2} - Starting Game Engine. Streaming output`);
+          const proc = execa("java", args, {
+            all: true,
+            shell: true
           });
-          // TODO: Save the stderr somewhere too so we have debug infor for each run?
+          proc.stdout.pipe(process.stdout);
+          proc.stderr.pipe(process.stderr);
 
-          console.log("Command:", command);
-          console.log("Exit Code:", exitCode);
-          console.log("Output");
-          console.log(all);
+          const { stdout, command, exitCode } = await proc;
+
+          console.log(`${p1} v ${p2} - Command: ${command}`);
+          console.log(`${p1} v ${p2} - Exit Code: ${exitCode}`);
+          console.log(`${p1} v ${p2} - stdout:`);
+          console.log(stdout);
 
           console.log(`${p1} v ${p2} - Uploading logfile to s3`);
           const data = await upload({
