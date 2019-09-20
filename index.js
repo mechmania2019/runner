@@ -80,8 +80,8 @@ async function main() {
             path.join(GAME_ENGINE_DIR, "target", "GameEngine.jar"),
             `${p1}:${p2}`,
             path.join(GAME_ENGINE_DIR, "board.csv"),
-            "Red", // TODO: fix
-            "Blue", // TODO: fix
+            owner1.name,
+            owner2.name,
             `http://${script1.ip}:8080/`,
             `http://${script2.ip}:8080/`,
             "STDOUT"
