@@ -95,7 +95,7 @@ async function main() {
           proc.stdout.pipe(process.stdout);
           proc.stderr.pipe(process.stderr);
 
-          const { stdout, command, exitCode } = await proc;
+          const { stdout, stderr, command, exitCode } = await proc;
 
           console.log(`${p1} v ${p2} - Command: ${command}`);
           console.log(`${p1} v ${p2} - Exit Code: ${exitCode}`);
@@ -106,6 +106,10 @@ async function main() {
           const data = await upload({
             Key: matchName,
             Body: stdout
+          });
+          await upload({
+            Key: matchName.replace("logs/", "errors/"),
+            Body: stderr
           });
           console.log(`${p1} v ${p2} - Uploaded to s3 (${data.Location})`);
 
